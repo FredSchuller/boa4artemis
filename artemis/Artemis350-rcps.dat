@@ -1,0 +1,6 @@
+57538.0    57569.0   ARTEMIS350_2016-06.rcp          # 2016-05-30 to 2016-06-30
+57662.0    57692.0   ARTEMIS350_2016-10_shifted.rcp  # 2016-10-01 to 2016-10-31
+57692.0	   57800.0   ARTEMIS350_shifted.rcp          # 2016-11-01 to 2017
+57800.0    58230.0   ARTEMIS350_2017-final.rcp       # for all obs. in 2017
+58230.0    68240.0   ARTEMIS350_2018A.rcp            # April 2018
+58240.0    70000.0   ARTEMIS350_2018A2.rcp           # Starting 2018 May 2nd: same as previous but arrays 1/2 back to "normal"
