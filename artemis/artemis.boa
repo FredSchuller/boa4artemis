@@ -39,10 +39,7 @@ This module contains reduction functions for Artemis data.
 '''
 
 import os
-# from commands import getoutput
 # import string
-# import time
-import numpy as np
 # from scipy import optimize
 
 # Boa functions required by redmfoc
@@ -91,7 +88,7 @@ print "\tReduction of a skydip scan."
 ####
 print " "
 print " \033[1;35m For more details, please do: print <function>.__doc__  \033[0m"
-print " \033[1;34m Version last modified: 2018-07-31 \033[0m"
+print " \033[1;34m Version last modified: 2018-08-31 \033[0m"
 # print " \033[1;34m Version last modified: 2017-07-17 \033[0m"  # last significant change
 print " "
 
@@ -101,8 +98,7 @@ print " "
 # Reduction functions start here
 #
 # -----------------------------------------------------------------
-def firstSteps(data,band=350,bright=0,applyFF=1,skydip=0,focus=0,
-               mask=None,threshold=0.):
+def firstSteps(data,band=350,bright=0,applyFF=1,skydip=0,focus=0,mask=None,threshold=0.):
     """
     firstSteps(data,band=350,bright=0,applyFF=1,skydip=0):
       First basic steps of data reduction.
@@ -114,7 +110,8 @@ def firstSteps(data,band=350,bright=0,applyFF=1,skydip=0,focus=0,
                       flat field using gains for sky emission (new 2017-07-04)
       focus (bool)  : if set, don't subtract any correlated noise, and don't
                       flag channels with high rms (e.g. the ref. chan.)
-
+      mask (Map object): source model to be masked in the data
+      threshold (f) : value above which to mask the data if a 'mask' is provided
     """
     # Calibration (without opacity correction) and update RCP
     mjd = data.ScanParam.MJD[0]
@@ -177,14 +174,6 @@ def redbeam(scannum,subscans=[],band=350,jup=0,toFlag=[]):
     # Calibration (without opacity correction) and update RCP
     mjd = data.ScanParam.MJD[0]
     rcp = getArtemisRCP(mjd,band)
-    # rcp = "Jupiter.47554_350.rcp"
-    # rcp = "ARTEMIS350_17232.rcp"
-    # rcp = "ARTEMIS350_17968.rcp"
-    # rcp = "ARTEMIS350_2017-Jup.rcp"
-
-    # rcp = "ARTEMIS350_2017.rcp"   # final (?) version - 2017-12-05
-    # rcp = "ARTEMIS350_2017_final.rcp"   # most final version - 2017-12-06
-
     VtoJy = getArtemisCalFactor(mjd,band)
     data.MessHand.info("Applying V-to-Jy factor: %6.3g" % (VtoJy))
     data.Data *= array(VtoJy,'f') 
@@ -204,19 +193,13 @@ def redbeam(scannum,subscans=[],band=350,jup=0,toFlag=[]):
     data.flagRms(below=0.1)
     data.flagFractionRms(ratio=5)
     data.medianNoiseRemoval(chanRef=-1,nbloop=1,factor=0.99)
-    # if not jup:
-    #     i0 = 1+288*arange(8)
-    #     for num in range(8):
-    #         i = i0[num]
-    #         data.MessHand.info(" ... subtracting median noise sub-array %i / 8"%(num+1))
-    #         data.medianNoiseRemoval(range(i,i+288),chanRef=-2,factor=0.99,nbloop=1)
-        
     data.polynomialBaseline(order=1)
     data.flagNan()
     data.computeWeight()
     data.unflag(flag=8)
  
 
+# -----------------------------------------------------------------
 def redstrong(scannum,subscans=[],band=450,tau=0,radius=26.,nshift=0,Az=0.,El=0.,showNEFD=0):
     """
     redstrong(scannum,subscans=[],band=450,tau=0,radius=26.,nshift=0,Az=0.,El=0.)
@@ -312,9 +295,11 @@ def process(data,scannum,subscans=[],band=350,weak=0,bright=0,tau=0,
       weak (bool)      : if set, more processing steps are performed, to decrease the noise
       bright (bool)    : if set, flag central position before zeroStart
       tau (float)      : zenith opacity; if tau=0 (the default), opacity correction is applied
-                         based on PWV written in the scan, and ATM model used for SABOCA
+                         based on PWV written in the scan, and appropriate PWV-to-tau linear relation
       nshift (int)     : number of frames by which to shift the data (optional)
       showNEFD (bool)  : should the NEFD be computed and displayed?
+      mask (Map object): source model to be masked in the data
+      threshold (f)    : value above which to mask the data if a 'mask' is provided
     """
     # Useful stuff
     i0 = 1+288*arange(8)
@@ -323,7 +308,6 @@ def process(data,scannum,subscans=[],band=350,weak=0,bright=0,tau=0,
     readPWV = not tau
     febe = "ARTEMIS%3i-BEAR1"%(band)
     tst = data.read(scannum,febe=febe,baseband=1,subscans=subscans,readPWV=readPWV)
-    #tst = data.read(scannum,febe=febe,baseband=1,subscans=subscans,readPWV=readPWV,readAzEl0=1)
     if tst:
         print " ***  Cannot read scan %s - Exiting !!  ***"%(str(scannum))
         return -1
@@ -402,7 +386,7 @@ def redpnt(scannum,subscans=[],band=450,weak=0,bright=1,tau=0,nshift=0,getresult
       weak (bool)      : if set, more processing steps are performed, to decrease the noise
       bright (bool)    : if set, flag central position before zeroStart
       tau (float)      : zenith opacity; if tau=0 (the default), opacity correction is applied
-                         based on PWV written in the scan, and ATM model used for SABOCA
+                         based on PWV written in the scan and linear relation
       nshift (int)     : number of frames by which to shift the data (optional)
       getresult (bool) : if set, returns the PointingResult
       showNEFD (bool)  : should the NEFD be computed and displayed?
@@ -444,7 +428,7 @@ def redweak(scannum,subscans=[],band=450,tau=0,nshift=0):
       subscans (i list): list of subscans (optional)
       band (int)       : select 350 or 450 microns
       tau (float)      : zenith opacity; if tau=0 (the default), opacity correction is applied
-                         based on PWV written in the scan, and ATM model used for SABOCA
+                         based on PWV written in the scan and linear relation
       nshift (int)     : number of frames by which to shift the data (optional)
     """
     redpnt(scannum=scannum,subscans=subscans,band=band,weak=1,bright=0,
@@ -460,7 +444,7 @@ def redcal(scannum,subscans=[],band=450,tau=0,nshift=0,showNEFD=0):
       subscans (i list): list of subscans (optional)
       band (int)       : select 350 or 450 microns
       tau (float)      : zenith opacity; if tau=0 (the default), opacity correction is applied
-                         based on PWV written in the scan, and ATM model used for SABOCA
+                         based on PWV written in the scan and linear relation
       nshift (int)     : number of frames by which to shift the data (optional)
     """
     res = redpnt(scannum=scannum,subscans=subscans,band=band,weak=1,bright=1,
@@ -623,8 +607,8 @@ def redmfoc(scannum,band=450,tau=0,nshift=0,pause=0,s2n=0,super=0):
       scannum (int)    : scan number
       band (int)       : select 350 or 450 microns
       tau (float)      : zenith opacity; if tau=0 (the default), opacity correction is
-                         applied based on PWV written in the scan, and ATM model used for
-                         SABOCA. In this case, PWV is determined for each subscan.
+                         applied based on PWV written in the scan, and linear relations.
+                         In this case, PWV is determined for each subscan.
       nshift (int)     : number of frames by which to shift the data (optional)
       pause (bool)     : if set, wait for user to press <return> after processing each subscan
       s2n (bool)       : if set, computes the source fitting on S/N rather than flux maps
@@ -801,10 +785,6 @@ def redsky(scannum,band=450,showPWV=1):
     # changed 2017-07-05: when skydip=1, applyFF uses the "ExtGain"
     firstSteps(data,band=band,bright=0,applyFF=1,skydip=1)
 
-    ### 2017-07-07 - FOR A TEST...
-    #
-    ## data.Data *= array(1.5,'f')
-    
     # Extract elevation and flux from the data
     el = data.ScanParam.get('el')
     # nObs = data.ScanParam.NObs
@@ -813,11 +793,6 @@ def redsky(scannum,band=450,showPWV=1):
         skydipflux = zeros((nObs),'f')
         fluxerr    = zeros((nObs),'f')
         elevation  = zeros((nObs),'f')
-    # else:
-    #     dumps = len(el)
-    #     skydipflux = zeros((dumps),'f')
-    #     fluxerr    = zeros((dumps),'f')
-    #     elevation  = zeros((dumps),'f')
 
     # flag  outliers
     data.flagFractionRms(ratio=3.)
@@ -846,11 +821,7 @@ def redsky(scannum,band=450,showPWV=1):
         ## fluxerr = sqrt(array(flux))
         fluxerr = ones(len(skydipflux))
         
-
     # Convert to Kelvin - very approximate!
-    # hot  = 1000.
-    # VtoK = 1./20.
-
     if band == 350:
         Jy_to_K = 1./75.
     elif band == 450:
@@ -858,8 +829,6 @@ def redsky(scannum,band=450,showPWV=1):
         
     # skydiptemp = data.ScanParam.T_amb - (hot - skydipflux) * VtoK
     skydiptemp = data.ScanParam.T_amb + skydipflux * Jy_to_K - 150.
-    
-    # skydiptemp = 190. + skydipflux * Jy_to_K
     if nObs == 1:
         temperr = sqrt(skydiptemp)
     else:
@@ -897,17 +866,9 @@ def redsky(scannum,band=450,showPWV=1):
             plot(air[i]*array([0.95,1.05,1.0,1.0,1.05,0.95],'f'),yy[i]+ee[i]*array([-1,-1,-1,1,1,1],'f'),
                  overplot=1,style='l')
             # print "i = ",i,skydipflux[i],fluxerr[i],skydiptemp[i],temperr[i]
-
-
-    # # Fit using scipy.optimize
-    # popt,pcov = optimize.curve_fit(fnSkydip,xx,yy,p0=guess,sigma=ee)
-    # perr = np.sqrt(np.diag(pcov))
-    # data.MessHand.info("   ----   skydip  results   ----")
-    # data.MessHand.info("Fit using scipy.optimize ")
-    # data.MessHand.info("tau_z  = %5.3f +- %5.3f"%(popt[2],perr[2]))
-    # # data.MessHand.info("F_eff  = %5.3f +- %5.3f"%(popt[1],perr[1]))
-    # # data.MessHand.info("T_atm  = %5.1f +- %5.1f"%(popt[0],perr[0]))
-    # # data.MessHand.info("offset = %5.1f +- %5.1f"%(popt[3],perr[3]))
+    else:
+        plot(air,yy+ee,overplot=1,ci=2)
+        plot(air,yy-ee,overplot=1,ci=2)
     
     
     # Fit using mpfit
@@ -927,10 +888,11 @@ def redsky(scannum,band=450,showPWV=1):
     coupl = 0.8
     guess.append(coupl)
     print " --- Fitting skydip function - Initial guess:"
+    print "  tau_z = ",data.Tau
     print "  F_eff = ",F_eff
     print "  Tatm  = ",Tatm
     print "  KtoJy = ",1./Jy_to_K
-    print "  S_0   = ",S_0
+    # print "  S_0   = ",S_0
     print "  tau_z = ",tau_z
     print "  coupl = ",coupl
     
@@ -951,33 +913,24 @@ def redsky(scannum,band=450,showPWV=1):
     # plot(xx,y2,overplot=1,ci=2,style='l',width=5)
     
     data.MessHand.info("   ----   skydip  results   ----")
-    # data.MessHand.info("Fit results with mpfit ")
-    data.MessHand.info("tau_z = %5.3f +- %5.3f"%(m1.params[1],m1.perror[1]))
-    data.MessHand.info("F_eff  = %5.3f +- %5.3f"%(m1.params[2],m1.perror[2]))
-    data.MessHand.info("T_atm  = %5.1f +- %5.1f"%(m1.params[0],m1.perror[0]))
-    data.MessHand.info("K_2_Jy = %5.1f +- %5.1f"%(1./m1.params[3],m1.perror[3]))
-    # data.MessHand.info("Offset = %5.1f +- %5.1f"%(m1.params[4],m1.perror[4]))
-    data.MessHand.info("Coupl  = %5.3f +- %5.3f"%(m1.params[5],m1.perror[5]))
+    ## p[0] = Tatm, p[1] = tau, p[2] = Feff, p[3] = Jy2K, p[4] = offset, p[5] = coupl
+    data.MessHand.info("> tau_z  = %5.3f +- %5.3f"%(m1.params[1],m1.perror[1]))
+    data.MessHand.info("> F_eff  = %5.3f +- %5.3f"%(m1.params[2],m1.perror[2]))
+    data.MessHand.info("> T_atm  = %5.1f +- %5.1f"%(m1.params[0],m1.perror[0]))
+    data.MessHand.info("> KtoJy  = %5.1f +- %5.1f"%(1./m1.params[3],m1.perror[3]/m1.params[3]**2))
+    data.MessHand.info("> Coupl  = %5.3f +- %5.3f"%(m1.params[5],m1.perror[5]))    
+    # data.MessHand.info(".[ chi^2 = %8.3f ]."%(m1.fnorm))
 
     # Also display the PWV
     if showPWV:
         meanPWV,rmsPWV = scanPWV(data,rms=1)
-        data.MessHand.info(" PWV   = %5.3f +- %5.3f"%(meanPWV,rmsPWV))
+        data.MessHand.info("_  PWV   = %5.3f +- %5.3f _"%(meanPWV,rmsPWV))
 
     # -------------------------------------------------------
     # Return results
-    zenithtau = m1.params[1]
-    # if showPWV:
-    #     return zenithtau,m1.perror[1],meanPWV,rmsPWV
-    # else:
-    #     return zenithtau,m1.perror[1]
-
     # changed 2017-06-21: also return Feff and Tatm
+    # and changed again 2018-05-29: also return coupl and chi^2
     if showPWV:
-        return zenithtau,m1.perror[1],m1.params[2],m1.params[0],m1.params[3],meanPWV,rmsPWV
+        return m1.params[1],m1.perror[1],m1.params[2],m1.params[0],1./m1.params[3],m1.params[5],m1.fnorm,meanPWV,rmsPWV
     else:
-        return zenithtau,m1.perror[1],m1.params[2],m1.params[0],m1.params[3]
-    # return m1
-
-    ## return popt[2]  # ,perr[2],meanPWV,rmsPWV
-
+        return m1.params[1],m1.perror[1],m1.params[2],m1.params[0],1./m1.params[3],m1.params[5],m1.fnorm
